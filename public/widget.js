@@ -77,9 +77,14 @@
 
   const root = document.createElement("div");
   root.id = "scb-root";
+  root.setAttribute(
+    "style",
+    `position:fixed;z-index:2147483000;${position}:20px;bottom:20px;width:56px;height:56px;margin:0;padding:0;`
+  );
   root.innerHTML = `
-    <button id="scb-launcher" aria-label="Open chat" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H9l-4 4v-4.2A2.5 2.5 0 0 1 4 13.5z"/></svg>
+    <button id="scb-launcher" aria-label="Open chat" type="button"
+      style="width:56px;height:56px;border:0;border-radius:999px;cursor:pointer;background:${accent};color:#14110c;display:grid;place-items:center;box-shadow:0 10px 30px rgba(0,0,0,.45);appearance:none;-webkit-appearance:none;margin:0;padding:0;">
+      <svg viewBox="0 0 24 24" aria-hidden="true" style="width:24px;height:24px;fill:currentColor;display:block;"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8A2.5 2.5 0 0 1 17.5 16H9l-4 4v-4.2A2.5 2.5 0 0 1 4 13.5z"/></svg>
     </button>
     <section id="scb-panel" role="dialog" aria-label="${botName} chat">
       <header id="scb-head">
