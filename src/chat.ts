@@ -102,6 +102,7 @@ export async function generateReply(
       messages: [{ role: "system", content: config.systemPrompt }, ...cleaned],
       temperature: 0.6,
       max_tokens: 500,
+      stream: false,
     }),
   });
 
@@ -110,10 +111,42 @@ export async function generateReply(
     throw new Error(`model_error:${response.status}:${text.slice(0, 300)}`);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const reply = data.choices?.[0]?.message?.content?.trim();
+  const raw = await response.text();
+  const reply = extractReply(raw);
   if (!reply) throw new Error("empty_model_reply");
   return { reply, provider: config.provider };
+}
+
+function extractReply(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+
+  // Non-streaming OpenAI JSON
+  try {
+    const data = JSON.parse(trimmed) as {
+      choices?: Array<{ message?: { content?: string }; delta?: { content?: string } }>;
+    };
+    const direct = data.choices?.[0]?.message?.content?.trim();
+    if (direct) return direct;
+  } catch {
+    // fall through to SSE parse
+  }
+
+  // Streaming SSE (OmniRoute may still stream)
+  let out = "";
+  for (const line of trimmed.split("\n")) {
+    const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
+    if (!payload || payload === "[DONE]") continue;
+    try {
+      const chunk = JSON.parse(payload) as {
+        choices?: Array<{ delta?: { content?: string }; message?: { content?: string } }>;
+      };
+      const piece =
+        chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? "";
+      if (piece) out += piece;
+    } catch {
+      // ignore bad chunks
+    }
+  }
+  return out.trim() || undefined;
 }
