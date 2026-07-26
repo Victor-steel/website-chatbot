@@ -35,7 +35,8 @@ app.get("/health", (c) =>
   c.json({
     ok: true,
     service: "website-chatbot",
-    provider: config.apiKey ? "openai" : "mock",
+    provider: config.provider,
+    model: config.model,
     botName: config.botName,
   }),
 );
@@ -46,7 +47,8 @@ app.get("/api/config", (c) =>
     greeting:
       process.env.GREETING ??
       `Hi — I'm ${config.botName}. Ask anything about our services.`,
-    provider: config.apiKey ? "openai" : "mock",
+    provider: config.provider,
+    model: config.model,
   }),
 );
 

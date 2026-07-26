@@ -3,23 +3,57 @@ export type ChatMessage = {
   content: string;
 };
 
+export type ProviderKind = "omniroute" | "openai" | "mock";
+
 type ChatConfig = {
   apiKey?: string;
   baseUrl: string;
   model: string;
   systemPrompt: string;
   botName: string;
+  provider: ProviderKind;
 };
 
+const DEFAULT_OPENAI = "https://api.openai.com/v1";
+
+function detectProvider(baseUrl: string): Exclude<ProviderKind, "mock"> {
+  const host = baseUrl.toLowerCase();
+  if (host.includes("omniroute") || host.includes(":20128")) return "omniroute";
+  return "openai";
+}
+
 export function loadChatConfig(): ChatConfig {
+  const baseUrl = (
+    process.env.LLM_BASE_URL ??
+    process.env.OPENAI_BASE_URL ??
+    DEFAULT_OPENAI
+  ).replace(/\/$/, "");
+
+  const apiKey =
+    process.env.LLM_API_KEY?.trim() ||
+    process.env.OPENAI_API_KEY?.trim() ||
+    process.env.OMNIROUTE_API_KEY?.trim() ||
+    undefined;
+
+  const kind = detectProvider(baseUrl);
+  const isCustomGateway = baseUrl !== DEFAULT_OPENAI;
+  // OmniRoute often runs with REQUIRE_API_KEY=false; allow calls without a key.
+  const canCallRemote = Boolean(apiKey) || isCustomGateway;
+
+  const model =
+    process.env.LLM_MODEL ??
+    process.env.OPENAI_MODEL ??
+    (kind === "omniroute" || isCustomGateway ? "auto" : "gpt-4o-mini");
+
   return {
-    apiKey: process.env.OPENAI_API_KEY?.trim() || undefined,
-    baseUrl: (process.env.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, ""),
-    model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+    apiKey,
+    baseUrl,
+    model,
     systemPrompt:
       process.env.SYSTEM_PROMPT ??
       "You are a helpful website assistant for a small business. Be concise, friendly, and practical.",
     botName: process.env.BOT_NAME ?? "Site Assistant",
+    provider: canCallRemote ? kind : "mock",
   };
 }
 
@@ -43,22 +77,26 @@ function mockReply(messages: ChatMessage[], botName: string): string {
 export async function generateReply(
   messages: ChatMessage[],
   config: ChatConfig,
-): Promise<{ reply: string; provider: "openai" | "mock" }> {
+): Promise<{ reply: string; provider: ProviderKind }> {
   const cleaned = messages
     .filter((m) => m.role === "user" || m.role === "assistant")
     .map((m) => ({ role: m.role, content: String(m.content ?? "").slice(0, 4000) }))
     .slice(-12);
 
-  if (!config.apiKey) {
+  if (config.provider === "mock") {
     return { reply: mockReply(cleaned, config.botName), provider: "mock" };
+  }
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (config.apiKey) {
+    headers.Authorization = `Bearer ${config.apiKey}`;
   }
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model: config.model,
       messages: [{ role: "system", content: config.systemPrompt }, ...cleaned],
@@ -77,5 +115,5 @@ export async function generateReply(
   };
   const reply = data.choices?.[0]?.message?.content?.trim();
   if (!reply) throw new Error("empty_model_reply");
-  return { reply, provider: "openai" };
+  return { reply, provider: config.provider };
 }
