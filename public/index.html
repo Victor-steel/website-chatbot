@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Website Chatbot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --canvas: #0e1116;
+        --ink: #ebe6dc;
+        --muted: #9aa1ab;
+        --brass: #c4a35a;
+        --line: #2a3038;
+        --panel: #151a22;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "DM Sans", system-ui, sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(900px 500px at 10% -10%, rgba(196,163,90,.16), transparent 55%),
+          radial-gradient(700px 400px at 100% 0%, rgba(79,120,180,.12), transparent 50%),
+          var(--canvas);
+      }
+      main {
+        width: min(720px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 72px 0 120px;
+      }
+      h1 {
+        font-family: Syne, sans-serif;
+        font-size: clamp(2rem, 5vw, 3rem);
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+      }
+      .lede { color: var(--muted); font-size: 1.05rem; line-height: 1.55; max-width: 38rem; }
+      pre {
+        margin: 28px 0;
+        padding: 18px 16px;
+        overflow: auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--brass); }
+      h2 { font-family: Syne, sans-serif; font-size: 1.15rem; margin: 36px 0 10px; }
+      ul { color: var(--muted); line-height: 1.6; padding-left: 1.2rem; }
+      .hint { margin-top: 28px; color: var(--muted); font-size: .95rem; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Website Chatbot</h1>
+      <p class="lede">
+        Railway-ready embeddable assistant. Drop one script tag on any site — the widget
+        talks to this service for replies.
+      </p>
+
+      <h2>Embed on a website</h2>
+      <pre id="embed"></pre>
+
+      <h2>Optional attributes</h2>
+      <ul>
+        <li><code>data-bot-name</code> — launcher title override</li>
+        <li><code>data-accent</code> — hex accent colour (default brass)</li>
+        <li><code>data-position</code> — <code>right</code> or <code>left</code></li>
+      </ul>
+
+      <h2>Railway env vars</h2>
+      <ul>
+        <li><code>OPENAI_API_KEY</code> — required for live AI (mock mode without it)</li>
+        <li><code>OPENAI_BASE_URL</code> / <code>OPENAI_MODEL</code> — optional</li>
+        <li><code>BOT_NAME</code>, <code>GREETING</code>, <code>SYSTEM_PROMPT</code></li>
+        <li><code>ALLOWED_ORIGINS</code> — comma list, or <code>*</code></li>
+      </ul>
+
+      <p class="hint">Open the chat bubble in the corner to try the demo.</p>
+    </main>
+    <script>
+      const host = location.origin;
+      document.getElementById("embed").textContent =
+`<script
+  src="${host}/widget.js"
+  data-bot-name="Site Assistant"
+  data-accent="#c4a35a"
+  defer
+><\/script>`;
+    </script>
+    <script src="/widget.js" data-bot-name="Site Assistant" defer></script>
+  </body>
+</html>
