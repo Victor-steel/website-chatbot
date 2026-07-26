@@ -37,6 +37,7 @@ app.get("/health", (c) =>
     service: "website-chatbot",
     provider: config.provider,
     model: config.model,
+    fallbacks: config.fallbacks,
     botName: config.botName,
   }),
 );
@@ -49,6 +50,7 @@ app.get("/api/config", (c) =>
       `Hi — I'm ${config.botName}. Ask anything about our services.`,
     provider: config.provider,
     model: config.model,
+    fallbacks: config.fallbacks,
   }),
 );
 
