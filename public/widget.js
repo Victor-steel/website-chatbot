@@ -2,8 +2,11 @@
   if (window.__SITE_CHATBOT_LOADED__) return;
   window.__SITE_CHATBOT_LOADED__ = true;
 
-  const script = document.currentScript;
-  const origin = new URL(script.src).origin;
+  const script =
+    document.currentScript ||
+    document.querySelector('script[src*="widget.js"]');
+  if (!script || !script.src) return;
+  const origin = new URL(script.src, window.location.href).origin;
   const botName = script.dataset.botName || "Site Assistant";
   const accent = script.dataset.accent || "#c4a35a";
   const position = script.dataset.position === "left" ? "left" : "right";
