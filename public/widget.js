@@ -13,21 +13,27 @@
 
   const css = `
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Syne:wght@600;700&display=swap");
-#scb-root{all:initial;position:fixed;z-index:2147483000;${position}:20px;bottom:20px;font-family:"DM Sans",system-ui,sans-serif}
-#scb-root *{box-sizing:border-box}
+#scb-root{
+  position:fixed !important; z-index:2147483000 !important; ${position}:20px !important; bottom:20px !important;
+  width:56px !important; height:56px !important; margin:0 !important; padding:0 !important;
+  font-family:"DM Sans",system-ui,sans-serif !important; pointer-events:auto !important;
+}
+#scb-root *, #scb-root *::before, #scb-root *::after{box-sizing:border-box !important;}
 #scb-launcher{
-  width:56px;height:56px;border:0;border-radius:999px;cursor:pointer;
-  background:linear-gradient(160deg,#1a1f27 0%,#0f1217 100%);
-  color:${accent};box-shadow:0 10px 30px rgba(0,0,0,.35);
-  display:grid;place-items:center;position:relative;overflow:hidden;
-  transition:transform .2s ease, box-shadow .2s ease;
+  width:56px !important; height:56px !important; border:0 !important; border-radius:999px !important; cursor:pointer !important;
+  background:${accent} !important; background-image:none !important;
+  color:#14110c !important; box-shadow:0 10px 30px rgba(0,0,0,.45) !important;
+  display:grid !important; place-items:center !important; position:relative !important; overflow:hidden !important;
+  appearance:none !important; -webkit-appearance:none !important; margin:0 !important; padding:0 !important;
+  transition:transform .2s ease, box-shadow .2s ease !important;
 }
 #scb-launcher::before{
-  content:"";position:absolute;inset:0;border-radius:inherit;
-  box-shadow:inset 0 0 0 1.5px ${accent};opacity:.85;
+  content:"" !important; position:absolute !important; inset:0 !important; border-radius:inherit !important;
+  box-shadow:inset 0 0 0 2px rgba(20,17,12,.25) !important; opacity:1 !important;
+  pointer-events:none !important;
 }
-#scb-launcher:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(0,0,0,.4)}
-#scb-launcher svg{width:22px;height:22px;fill:currentColor}
+#scb-launcher:hover{transform:translateY(-2px) !important; box-shadow:0 14px 34px rgba(0,0,0,.5) !important;}
+#scb-launcher svg{width:24px !important; height:24px !important; fill:currentColor !important; display:block !important;}
 #scb-panel{
   position:absolute;${position}:0;bottom:72px;width:min(360px,calc(100vw - 32px));
   height:520px;max-height:calc(100vh - 110px);display:none;flex-direction:column;
