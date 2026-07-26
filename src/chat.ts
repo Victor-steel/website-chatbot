@@ -9,6 +9,7 @@ type ChatConfig = {
   apiKey?: string;
   baseUrl: string;
   model: string;
+  fallbacks: string[];
   systemPrompt: string;
   botName: string;
   provider: ProviderKind;
@@ -16,10 +17,58 @@ type ChatConfig = {
 
 const DEFAULT_OPENAI = "https://api.openai.com/v1";
 
+/** Built-in OmniRoute free-first routing chain */
+const OMNIROUTE_FREE_FALLBACKS = [
+  "auto/best-free",
+  "auto/coding:free",
+  "auto/cheap",
+  "auto/fast",
+  "auto/chat",
+  "auto/smart",
+  "auto/best-chat",
+  "auto/best-fast",
+];
+
+let freeModelCache: { at: number; models: string[] } | null = null;
+
 function detectProvider(baseUrl: string): Exclude<ProviderKind, "mock"> {
   const host = baseUrl.toLowerCase();
   if (host.includes("omniroute") || host.includes(":20128")) return "omniroute";
   return "openai";
+}
+
+function parseList(value?: string): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function unique(models: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const m of models) {
+    const key = m.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function looksFree(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return (
+    id.includes("free") ||
+    id.startsWith("pol/") ||
+    id.includes("pollination") ||
+    id.includes("longcat") ||
+    id.includes("kiro") ||
+    id.includes("qoder") ||
+    id.includes("cerebras") ||
+    id.includes("nvidia") ||
+    id.includes("cloudflare")
+  );
 }
 
 export function loadChatConfig(): ChatConfig {
@@ -37,24 +86,65 @@ export function loadChatConfig(): ChatConfig {
 
   const kind = detectProvider(baseUrl);
   const isCustomGateway = baseUrl !== DEFAULT_OPENAI;
-  // OmniRoute often runs with REQUIRE_API_KEY=false; allow calls without a key.
   const canCallRemote = Boolean(apiKey) || isCustomGateway;
 
-  const model =
+  let model =
     process.env.LLM_MODEL ??
     process.env.OPENAI_MODEL ??
-    (kind === "omniroute" || isCustomGateway ? "auto" : "gpt-4o-mini");
+    (kind === "omniroute" || isCustomGateway ? "auto/best-free" : "gpt-4o-mini");
+
+  // Plain "auto" on OmniRoute should prefer free routing
+  if ((kind === "omniroute" || isCustomGateway) && model === "auto") {
+    model = "auto/best-free";
+  }
+
+  const envFallbacks = parseList(process.env.LLM_FALLBACKS);
+  const fallbacks =
+    envFallbacks.length > 0
+      ? envFallbacks
+      : kind === "omniroute" || isCustomGateway
+        ? OMNIROUTE_FREE_FALLBACKS
+        : [];
 
   return {
     apiKey,
     baseUrl,
     model,
+    fallbacks,
     systemPrompt:
       process.env.SYSTEM_PROMPT ??
       "You are a helpful website assistant for a small business. Be concise, friendly, and practical.",
     botName: process.env.BOT_NAME ?? "Site Assistant",
     provider: canCallRemote ? kind : "mock",
   };
+}
+
+async function discoverFreeModels(config: ChatConfig): Promise<string[]> {
+  if (config.provider !== "omniroute") return [];
+  const now = Date.now();
+  if (freeModelCache && now - freeModelCache.at < 5 * 60_000) {
+    return freeModelCache.models;
+  }
+
+  try {
+    const headers: Record<string, string> = {};
+    if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+    const res = await fetch(`${config.baseUrl}/models`, { headers });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { data?: Array<{ id?: string }> };
+    const models = (data.data ?? [])
+      .map((m) => m.id ?? "")
+      .filter((id) => id && looksFree(id));
+    freeModelCache = { at: now, models };
+    return models;
+  } catch {
+    return [];
+  }
+}
+
+async function buildModelChain(config: ChatConfig): Promise<string[]> {
+  const discovered = await discoverFreeModels(config);
+  return unique([config.model, ...config.fallbacks, ...discovered]);
 }
 
 function mockReply(messages: ChatMessage[], botName: string): string {
@@ -74,19 +164,11 @@ function mockReply(messages: ChatMessage[], botName: string): string {
   return `Got it. Here's a short take on that: ${last.slice(0, 180)}${last.length > 180 ? "…" : ""} — want me to turn this into next steps or a contact handoff?`;
 }
 
-export async function generateReply(
-  messages: ChatMessage[],
+async function callModel(
   config: ChatConfig,
-): Promise<{ reply: string; provider: ProviderKind }> {
-  const cleaned = messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .map((m) => ({ role: m.role, content: String(m.content ?? "").slice(0, 4000) }))
-    .slice(-12);
-
-  if (config.provider === "mock") {
-    return { reply: mockReply(cleaned, config.botName), provider: "mock" };
-  }
-
+  model: string,
+  messages: ChatMessage[],
+): Promise<string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -98,8 +180,8 @@ export async function generateReply(
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: config.model,
-      messages: [{ role: "system", content: config.systemPrompt }, ...cleaned],
+      model,
+      messages: [{ role: "system", content: config.systemPrompt }, ...messages],
       temperature: 0.6,
       max_tokens: 500,
       stream: false,
@@ -108,20 +190,56 @@ export async function generateReply(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`model_error:${response.status}:${text.slice(0, 300)}`);
+    throw new Error(`model_error:${model}:${response.status}:${text.slice(0, 200)}`);
   }
 
   const raw = await response.text();
   const reply = extractReply(raw);
-  if (!reply) throw new Error("empty_model_reply");
-  return { reply, provider: config.provider };
+  if (!reply) throw new Error(`empty_model_reply:${model}`);
+  return reply;
+}
+
+export async function generateReply(
+  messages: ChatMessage[],
+  config: ChatConfig,
+): Promise<{ reply: string; provider: ProviderKind; model: string; attempted: string[] }> {
+  const cleaned = messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: String(m.content ?? "").slice(0, 4000) }))
+    .slice(-12);
+
+  if (config.provider === "mock") {
+    return {
+      reply: mockReply(cleaned, config.botName),
+      provider: "mock",
+      model: "mock",
+      attempted: ["mock"],
+    };
+  }
+
+  const chain = await buildModelChain(config);
+  const attempted: string[] = [];
+  const errors: string[] = [];
+
+  for (const model of chain) {
+    attempted.push(model);
+    try {
+      const reply = await callModel(config, model, cleaned);
+      return { reply, provider: config.provider, model, attempted };
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(
+    `all_models_failed:${attempted.length}:` + errors.slice(0, 3).join(" | "),
+  );
 }
 
 function extractReply(raw: string): string | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
 
-  // Non-streaming OpenAI JSON
   try {
     const data = JSON.parse(trimmed) as {
       choices?: Array<{ message?: { content?: string }; delta?: { content?: string } }>;
@@ -129,10 +247,9 @@ function extractReply(raw: string): string | undefined {
     const direct = data.choices?.[0]?.message?.content?.trim();
     if (direct) return direct;
   } catch {
-    // fall through to SSE parse
+    // SSE below
   }
 
-  // Streaming SSE (OmniRoute may still stream)
   let out = "";
   for (const line of trimmed.split("\n")) {
     const payload = line.startsWith("data:") ? line.slice(5).trim() : "";
@@ -145,7 +262,7 @@ function extractReply(raw: string): string | undefined {
         chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.message?.content ?? "";
       if (piece) out += piece;
     } catch {
-      // ignore bad chunks
+      // ignore
     }
   }
   return out.trim() || undefined;
